@@ -1,6 +1,7 @@
 use base62;
-use base64;
-use digest::{Digest, Mac};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
+use digest::{Digest, KeyInit, Mac};
 use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
 use hmac::Hmac;
 use serde::de::DeserializeOwned;
@@ -82,7 +83,7 @@ impl BaseSigner {
     }
     fn encoded_signature(&self, value: &[u8]) -> String {
         let mac = self.get_mac_with_value(value);
-        base64::encode_config(mac.finalize().into_bytes(), base64::URL_SAFE_NO_PAD)
+        URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
     }
 
     pub fn decode_object<T>(&self, value: String) -> Result<T, SignatureError>
@@ -93,8 +94,7 @@ impl BaseSigner {
             Some(remainder) => (true, remainder.as_bytes()),
             None => (false, value.as_bytes()),
         };
-        let mut decoded_value =
-            base64::decode_config(encoded_value, base64::URL_SAFE_NO_PAD).unwrap();
+        let mut decoded_value = URL_SAFE_NO_PAD.decode(encoded_value).unwrap();
         if decompress {
             let mut decoder = ZlibDecoder::new(&decoded_value[..]);
             let mut unpacked = String::new();
@@ -122,7 +122,7 @@ impl BaseSigner {
                 is_compressed = true;
             }
         }
-        let mut value = base64::encode_config(value, base64::URL_SAFE_NO_PAD);
+        let mut value = URL_SAFE_NO_PAD.encode(value);
         if is_compressed {
             value.insert(0, '.');
         }
@@ -136,7 +136,7 @@ impl Signer for BaseSigner {
     }
     fn unsign(&self, signed_value: String) -> Result<String, SignatureError> {
         if let Some((value, sig)) = signed_value.rsplit_once(":") {
-            if let Ok(decoded_sig) = base64::decode_config(sig, base64::URL_SAFE_NO_PAD) {
+            if let Ok(decoded_sig) = URL_SAFE_NO_PAD.decode(sig) {
                 let mac = self.get_mac_with_value(value.as_bytes());
                 if let Ok(_) = mac.verify_slice(&decoded_sig[..]) {
                     Ok(value.to_string())
